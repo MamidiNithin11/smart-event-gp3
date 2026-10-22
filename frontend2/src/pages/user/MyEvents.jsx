@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Ticket, Calendar, MapPin, XCircle, ArrowLeft } from "lucide-react";
+import { Ticket, Calendar, MapPin, XCircle, CheckCircle2 } from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
 import { getUserRegistrations, cancelRegistration } from "../../services/registrationService";
 import { getEventById } from "../../services/eventService";
@@ -157,6 +157,13 @@ export default function MyEvents() {
                       <Badge variant={isCancelled ? "danger" : "success"}>
                         {reg.status || "CONFIRMED"}
                       </Badge>
+                      {event?.is_completed && (
+                        <Badge variant="neutral">
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                            <CheckCircle2 size={13} /> Completed
+                          </span>
+                        </Badge>
+                      )}
                     </div>
 
                     {event && (
@@ -167,7 +174,7 @@ export default function MyEvents() {
                         </span>
                         <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
                           <MapPin size={14} />
-                          {event.venue_name || "Venue TBA"}
+                          {event.venue_name || event.address || "Venue TBA"}
                         </span>
                       </div>
                     )}

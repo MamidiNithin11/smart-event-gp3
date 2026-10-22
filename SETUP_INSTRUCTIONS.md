@@ -206,11 +206,11 @@ docker compose run --rm backend python -m alembic upgrade head
 | `SECRET_KEY` | JWT auth secret |
 | `CORS_ORIGINS` | Allowed frontend origins (comma-separated) |
 | `REDIS_URL` / `ENABLE_REDIS_CACHE` | Cache |
-| `OPENROUTER_API_KEY` | LLM provider |
+| `OPENROUTER_API_KEY` | LLM + embedding provider |
 | `OPENROUTER_MODEL` | Primary chat model |
 | `OPENROUTER_FALLBACK_MODELS` | Fallback chat models |
-| `HUGGINGFACE_API_KEY` | Legacy embeddings (if used) |
-| `EMBEDDING_MODEL` / `EMBEDDING_DIM` | RAG embedding settings |
+| `OPENROUTER_EMBEDDING_MODEL` / `OPENROUTER_EMBEDDING_DIM` | RAG embeddings (2048-dim) |
+| `RAG_ACTIVE_EMBEDDING_INDEX` | Must be `nvidia` (OpenRouter) |
 | `ENABLE_API_DOCS` | Show `/docs` and `/redoc` |
 
 Full list with comments: `backend/.env.example`.

@@ -3,7 +3,7 @@ os.environ['DATABASE_URL'] = 'postgresql://postgres:password@localhost:5432/even
 import pytest
 os.environ.setdefault('OPENROUTER_MODEL', 'test/openrouter-chat-model')
 os.environ.setdefault('OPENROUTER_EMBEDDING_MODEL', 'test/openrouter-embedding-model')
-os.environ.setdefault('EMBEDDING_MODEL', 'test/legacy-embedding-model')
+os.environ.setdefault('RAG_ACTIVE_EMBEDDING_INDEX', 'nvidia')
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

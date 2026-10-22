@@ -41,6 +41,8 @@ The architecture is designed to support intelligent event-management workflows a
 - Delete events
 - Retrieve published events
 - Event search and navigation
+- Automatically mark completed events and hide them from public event discovery
+- Browse past events and their attendee feedback on a dedicated completed-events page
 
 ## 📝 Registration Management
 
@@ -66,9 +68,11 @@ The architecture is designed to support intelligent event-management workflows a
 
 ## ⭐ Feedback
 
-- Submit feedback
+- Submit a rating and comment after attending a completed event
+- One feedback entry per attendee and event
 - Event-wise feedback
 - User-wise feedback
+- Admin review and deletion of feedback
 
 ## 🛡️ Admin Dashboard
 
@@ -299,10 +303,9 @@ cd backend
 ```
 
 Copy `.env.example` to `.env` from inside `backend/` (or use your existing
-local `backend/.env`), then set `DATABASE_URL` and a Hugging Face token
-with **Make calls to Inference Providers** permission. The AI chat uses
-`openai/gpt-oss-120b` through Hugging Face; the RAG embedding model is
-`BAAI/bge-small-en-v1.5`.
+local `backend/.env`), then set `DATABASE_URL` and `OPENROUTER_API_KEY`.
+Chat and RAG embeddings both use OpenRouter. The default embedding model is
+`nvidia/llama-nemotron-embed-vl-1b-v2:free` (2048 dimensions).
 
 Install dependencies from `backend/`:
 
@@ -310,8 +313,8 @@ Install dependencies from `backend/`:
 uv sync
 ```
 
-Apply database migrations (the current embedding model uses 384-dimensional
-vectors):
+Apply database migrations (OpenRouter embeddings use the 2048-dim
+`knowledge_chunks_nvidia` index):
 
 ```powershell
 uv run alembic upgrade head

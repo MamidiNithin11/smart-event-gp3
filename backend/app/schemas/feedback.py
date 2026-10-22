@@ -6,12 +6,22 @@ class FeedbackCreate(BaseModel):
     user_id: UUID
     event_id: UUID
     rating: int = Field(ge=1, le=5)
-    comment: str | None = None
+    comment: str | None = Field(default=None, max_length=2000)
 
 class FeedbackResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     feedback_id: UUID
     user_id: UUID
+    event_id: UUID
+    rating: int
+    comment: str | None
+    created_at: datetime | None = None
+    user_name: str | None = None
+    event_title: str | None = None
+
+
+class PublicFeedbackResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     event_id: UUID
     rating: int
     comment: str | None

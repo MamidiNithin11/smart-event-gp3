@@ -3,7 +3,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from app.core.ai_config import ai_settings
-from app.llm.exceptions import LLMUnavailableError
+from app.llm.exceptions import LLMProviderError
 from app.llm.router import LLMProviderRouter
 from app.rag.search import RetrievedChunk
 logger = logging.getLogger(__name__)
@@ -68,13 +68,13 @@ def check_grounding(answer: str, context: str) -> tuple[bool, str]:
             temperature=0.0,
         )
         raw = str(response.content).strip()
-    except LLMUnavailableError:
-        logger.warning('Grounding check failed, accepting answer.')
-        return (True, 'checker unavailable')
+    except LLMProviderError:
+        logger.warning('Grounding check unavailable; rejecting the unverified answer.')
+        return (False, 'grounding checker unavailable')
     match = re.search('GROUNDED\\s*:\\s*(yes|no)', raw, re.IGNORECASE)
     if not match:
-        logger.warning('Unparseable grounding verdict.')
-        return (True, 'unparseable verdict')
+        logger.warning('Grounding checker returned an unparseable verdict; rejecting the answer.')
+        return (False, 'unparseable grounding verdict')
     if match.group(1).lower() == 'yes':
         return (True, '')
     note = ''

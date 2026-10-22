@@ -25,7 +25,8 @@ class KnowledgeChunk(Base):
     source_filename = Column(String, nullable=False)
     chunk_index = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(ai_settings.EMBEDDING_DIM), nullable=True)
+    # Legacy HF table retained for existing DBs; ingest/search use knowledge_chunks_nvidia only.
+    embedding = Column(Vector(384), nullable=True)
     search_vec = Column(TSVECTOR, nullable=True)
     doc_metadata = Column(JSONB, nullable=True, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

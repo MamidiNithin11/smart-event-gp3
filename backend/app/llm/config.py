@@ -8,10 +8,8 @@ class LLMSettings(BaseSettings):
     OPENROUTER_BASE_URL: str = 'https://openrouter.ai/api/v1'
     OPENROUTER_MODEL: str = Field(min_length=1)
     OPENROUTER_FALLBACK_MODELS: str = ''
-
     LLM_TIMEOUT_SECONDS: int = Field(default=60, ge=5, le=300)
     LLM_MAX_RETRIES: int = Field(default=1, ge=0, le=3)
-
     class Config:
         env_file = '.env'
         extra = 'ignore'

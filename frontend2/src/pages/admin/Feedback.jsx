@@ -93,8 +93,14 @@ export default function AdminFeedback() {
                   </button>
                 </div>
 
+                <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                  <strong style={{ color: "var(--text-primary)" }}>{item.event_title || "Event"}</strong>
+                  {" · "}
+                  {item.user_name || "Attendee"}
+                </div>
+
                 <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", lineHeight: 1.6, flex: 1 }}>
-                  "{item.comments || item.comment || "No written comments."}"
+                  "{item.comment || "No written comments."}"
                 </p>
 
                 <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", borderTop: "1px solid var(--border-color)", paddingTop: "0.75rem" }}>
