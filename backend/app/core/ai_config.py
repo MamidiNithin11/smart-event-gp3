@@ -1,5 +1,4 @@
 from typing import Literal
-
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
@@ -23,7 +22,7 @@ class AISettings(BaseSettings):
     RRF_K: int = 60
     FUSED_TOP_K: int = 8
     FINAL_TOP_K: int = 4
-    ENABLE_RERANKER: bool = True
+    ENABLE_RERANKER: bool = False
     ENABLE_METADATA_EXTRACTION: bool = True
     ENABLE_HALLUCINATION_CHECK: bool = True
     MAX_GENERATION_RETRIES: int = 1

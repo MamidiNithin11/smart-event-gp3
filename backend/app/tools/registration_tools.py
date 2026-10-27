@@ -87,3 +87,31 @@ def get_event_registrations(event_id: str) -> str:
     confirmed = [r for r in registrations if r.status == 'confirmed']
     cancelled = len(registrations) - len(confirmed)
     return f"'{event.title}': {len(confirmed)} confirmed registration(s), {cancelled} cancelled. {event.available_seats} of {event.capacity} seats still open."
+
+@tool
+def get_event_registration_count(event_name: str) -> str:
+    """Get the confirmed registration count for an event by name (Admin only)."""
+    from app.tools.context import require_admin
+    context = require_admin("view event registration counts")
+    name = event_name.strip()
+    if not name:
+        return 'Provide the event name to check its registration count.'
+
+    matching_events = event_service.find_events_by_title(
+        context.db,
+        name,
+        actor_id=context.user_id,
+    )
+    if not matching_events:
+        return f"No event matched '{name}'."
+    if len(matching_events) > 1:
+        titles = ', '.join(sorted(event.title for event in matching_events))
+        return f"More than one event matched '{name}': {titles}. Please specify the exact event title."
+
+    event = matching_events[0]
+    confirmed_count = registration_service.get_event_registration_count(
+        context.db,
+        event.event_id,
+        actor_id=context.user_id,
+    )
+    return f"'{event.title}' has {confirmed_count} confirmed registration(s)."

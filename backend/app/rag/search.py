@@ -1,10 +1,12 @@
 from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
+import time
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 from app.core.ai_config import ai_settings
 from app.rag.clients import embed_query_openrouter
+from app.observability.timing import emit_timing
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -32,7 +34,13 @@ class RetrievedChunk:
 
 def dense_search(db: Session, query: str, top_k: int | None=None, doc_type: str | None=None) -> list[RetrievedChunk]:
     top_k = top_k or ai_settings.DENSE_TOP_K
+    started = time.perf_counter()
     query_vector = embed_query_openrouter(query)
+    emit_timing(
+        'rag.query_embedding',
+        (time.perf_counter() - started) * 1000,
+        model=ai_settings.OPENROUTER_EMBEDDING_MODEL,
+    )
     embedding_column = 'embedding_primary'
     table_name = 'knowledge_chunks_nvidia'
     vector_type = f'halfvec({ai_settings.OPENROUTER_EMBEDDING_DIM})'
@@ -46,6 +54,7 @@ def dense_search(db: Session, query: str, top_k: int | None=None, doc_type: str 
         'doc_type': doc_type,
         'model_name': selected_model,
     }
+    started = time.perf_counter()
     rows = db.execute(
         sql_text(
             f'\n            SELECT\n                chunk_id::text,\n                content,\n                source_filename,\n                doc_type,\n                doc_metadata,\n                            1 - ({vector_expression} <=> CAST(:query_vector AS {vector_type})) AS score\n'
@@ -58,11 +67,14 @@ def dense_search(db: Session, query: str, top_k: int | None=None, doc_type: str 
         ),
         parameters,
     ).fetchall()
+    emit_timing('rag.dense_vector_query', (time.perf_counter() - started) * 1000, result_count=len(rows))
     return [RetrievedChunk(chunk_id=row[0], content=row[1], source_filename=row[2], doc_type=row[3], metadata=row[4] or {}, dense_score=float(row[5])) for row in rows]
 
 def sparse_search(db: Session, query: str, top_k: int | None=None, doc_type: str | None=None) -> list[RetrievedChunk]:
     top_k = top_k or ai_settings.SPARSE_TOP_K
     filter_clause = 'AND doc_type = :doc_type' if doc_type else ''
     table_name = 'knowledge_chunks_nvidia'
+    started = time.perf_counter()
     rows = db.execute(sql_text(f"\n            SELECT\n                chunk_id::text,\n                content,\n                source_filename,\n                doc_type,\n                doc_metadata,\n                ts_rank_cd(search_vec, websearch_to_tsquery('english', :query)) AS score\n            FROM {table_name}\n            WHERE search_vec @@ websearch_to_tsquery('english', :query)\n            {filter_clause}\n            ORDER BY score DESC\n            LIMIT :top_k\n            "), {'query': query, 'top_k': top_k, 'doc_type': doc_type}).fetchall()
+    emit_timing('rag.sparse_search', (time.perf_counter() - started) * 1000, result_count=len(rows))
     return [RetrievedChunk(chunk_id=row[0], content=row[1], source_filename=row[2], doc_type=row[3], metadata=row[4] or {}, sparse_score=float(row[5])) for row in rows]

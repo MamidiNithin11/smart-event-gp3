@@ -62,6 +62,21 @@ def test_event_custom_address_is_stored_only_on_that_event(client):
     assert response.json()['address'] == address
     event_id = response.json()['event_id']
 
+    duplicate = client.post(
+        '/api/events/',
+        headers={'Authorization': f'Bearer {token}'},
+        json={
+            'title': ' custom address event ',
+            'category': 'Workshop',
+            'address': address,
+            'event_date': event_date.isoformat(),
+            'capacity': 25,
+        },
+    )
+
+    assert duplicate.status_code == 409
+    assert 'already exists' in duplicate.json()['detail']
+
     updated_address = '456 Other Road, Example City'
     updated = client.put(
         f'/api/events/{event_id}',

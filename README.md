@@ -303,8 +303,9 @@ cd backend
 ```
 
 Copy `.env.example` to `.env` from inside `backend/` (or use your existing
-local `backend/.env`), then set `DATABASE_URL` and `OPENROUTER_API_KEY`.
-Chat and RAG embeddings both use OpenRouter. The default embedding model is
+local `backend/.env`), then set `DATABASE_URL`, `GROQ_API_KEY`, and
+`OPENROUTER_API_KEY`. Agent chat uses Groq when configured; OpenRouter remains
+the RAG embeddings provider. The default embedding model is
 `nvidia/llama-nemotron-embed-vl-1b-v2:free` (2048 dimensions).
 
 Install dependencies from `backend/`:

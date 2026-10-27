@@ -61,6 +61,23 @@ def is_retryable_provider_error(error: Any) -> bool:
     if isinstance(error, (TimeoutError, ConnectionError, OSError)):
         return True
 
+    # langchain_openai raises ValueError when the upstream gives a provider error dict
+    # e.g. {'message': 'Upstream error from Nvidia: ResourceExhausted...', 'code': 502}
+    if isinstance(error, ValueError) and error.args:
+        arg = error.args[0]
+        if isinstance(arg, dict):
+            code = arg.get('code')
+            err_type = str(arg.get('metadata', {}).get('error_type', '')).lower()
+            if code in {429, 500, 502, 503, 504} or 'unavailable' in err_type or 'exhausted' in err_type:
+                return True
+        text = str(arg).lower()
+        retryable_phrases = (
+            'rate limit', 'too many requests', 'quota', 'exhausted',
+            'unavailable', 'overloaded', 'resource', '429', '502', '503', '504',
+        )
+        if any(phrase in text for phrase in retryable_phrases):
+            return True
+
     response = getattr(error, 'response', None)
     status_code = getattr(response, 'status_code', None)
     if status_code == 400 and _is_invalid_api_key_response(error):
@@ -105,6 +122,17 @@ def normalize_provider_exception(error: Exception, *, provider: str | None = Non
         return error
 
     status_code = None
+
+    # langchain_openai raises ValueError wrapping a provider error dict
+    # e.g. ValueError({'message': '...', 'code': 502, 'metadata': {'error_type': 'provider_unavailable'}})
+    if isinstance(error, ValueError) and error.args:
+        arg = error.args[0]
+        if isinstance(arg, dict):
+            status_code = arg.get('code')
+            message = arg.get('message', str(error))
+            retryable = is_retryable_provider_error(error)
+            return LLMProviderError(provider=provider, message=message, status_code=status_code, retryable=retryable, cause=error)
+
     response = getattr(error, 'response', None)
     if response is not None:
         status_code = getattr(response, 'status_code', None)

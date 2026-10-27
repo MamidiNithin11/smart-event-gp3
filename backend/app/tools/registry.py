@@ -4,7 +4,7 @@ from app.core.permissions import ADMIN_ROLES, GUEST_ROLE, USER_ROLE
 from app.tools.admin_tools import create_user, create_venue, delete_user, delete_venue, list_all_registrations, list_users, update_user_role, update_venue, view_agent_activity, view_agent_run
 from app.tools.event_tools import cancel_event, create_event, delete_event, get_event_details, search_events, update_event
 from app.tools.rag_tools import search_event_policy
-from app.tools.registration_tools import cancel_registration, get_event_registrations, my_registrations, register_participant
+from app.tools.registration_tools import cancel_registration, get_event_registration_count, get_event_registrations, my_registrations, register_participant
 from app.tools.venue_tools import check_venue_availability, search_venues
 GUEST_TOOLS: list[BaseTool] = [search_events, get_event_details, search_venues, check_venue_availability, search_event_policy]
 USER_TOOLS: list[BaseTool] = GUEST_TOOLS + [register_participant, cancel_registration, my_registrations]
@@ -13,6 +13,7 @@ ADMIN_TOOLS: list[BaseTool] = [
     update_event,
     cancel_event,
     delete_event,
+    get_event_registration_count,
     get_event_registrations,
     list_all_registrations,
     create_venue,

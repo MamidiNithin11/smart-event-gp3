@@ -1,13 +1,17 @@
 from __future__ import annotations
+import json
 import logging
 import os
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Literal
 from uuid import UUID
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile
+from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 from app.agent import memory
 from app.agent.graph import run_agent
@@ -17,6 +21,7 @@ from app.db.database import get_db
 from app.models.agent import ChatMessage
 from app.models.user import User
 from app.observability.logger import get_recent_runs, get_run_tool_calls
+from app.observability.timing import emit_timing
 from app.rag import ingest
 from app.rag.converter import SUPPORTED
 from app.schemas.chat import AgentRunOut, ChatRequest, ChatResponse, DeleteDocumentResponse, DeleteSessionsRequest, DeleteSessionsResponse, IngestResponse, MessageOut, SessionSummary, ToolCallOut
@@ -28,13 +33,56 @@ optional_chat_bearer = HTTPBearer(auto_error=False)
 
 def get_optional_chat_user(credentials: HTTPAuthorizationCredentials | None=Depends(optional_chat_bearer), db: Session=Depends(get_db)) -> User | None:
     if credentials is None:
+        emit_timing('auth.jwt_and_user_lookup', 0, authenticated=False)
         return None
-    return get_current_user(credentials=credentials, db=db)
+    started = time.perf_counter()
+    try:
+        return get_current_user(credentials=credentials, db=db)
+    finally:
+        emit_timing('auth.jwt_and_user_lookup', (time.perf_counter() - started) * 1000)
 
 @router.post('/chat', response_model=ChatResponse, tags=['ai'])
-def chat(payload: ChatRequest, db: Session=Depends(get_db), current_user: User | None=Depends(get_optional_chat_user)) -> ChatResponse:
+def chat(payload: ChatRequest, response: Response, db: Session=Depends(get_db), current_user: User | None=Depends(get_optional_chat_user)) -> ChatResponse:
+    started = time.perf_counter()
     result = run_agent(db=db, user_id=current_user.id if current_user else None, message=payload.message, session_id=payload.session_id)
+    api_duration_ms = (time.perf_counter() - started) * 1000
+    response.headers['Server-Timing'] = f'agent;dur={result.latency_ms:.2f}, api;dur={api_duration_ms:.2f}'
+    emit_timing(
+        'api.chat_handler',
+        api_duration_ms,
+        run_id=str(result.run_id),
+        status=result.status,
+    )
     return ChatResponse(reply=result.reply, session_id=result.session_id, run_id=result.run_id, intent=result.intent, tools_used=result.tools_used, sources=result.sources, latency_ms=round(result.latency_ms, 2), status=result.status)
+
+@router.post('/chat/stream', tags=['ai'])
+def chat_stream(payload: ChatRequest, db: Session=Depends(get_db), current_user: User | None=Depends(get_optional_chat_user)):
+    """Streaming SSE endpoint. Yields the agent reply token-by-token, then a final
+    JSON envelope with metadata. The frontend should consume this as an EventSource
+    or via fetch with a ReadableStream."""
+    def event_generator():
+        stream_started = time.perf_counter()
+        result = run_agent(db=db, user_id=current_user.id if current_user else None, message=payload.message, session_id=payload.session_id)
+        emit_timing(
+            'api.chat_stream_time_to_first_event',
+            (time.perf_counter() - stream_started) * 1000,
+            run_id=str(result.run_id),
+            note='agent_finishes_before_streaming_reply_characters',
+        )
+        for char in result.reply:
+            yield f'data: {json.dumps({"token": char})}\n\n'
+        meta = {
+            'done': True,
+            'session_id': str(result.session_id),
+            'run_id': str(result.run_id),
+            'intent': result.intent,
+            'tools_used': result.tools_used,
+            'sources': result.sources,
+            'latency_ms': round(result.latency_ms, 2),
+            'status': result.status,
+        }
+        yield f'data: {json.dumps(meta)}\n\n'
+    return StreamingResponse(event_generator(), media_type='text/event-stream', headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 @router.get('/chat/sessions', response_model=list[SessionSummary], tags=['ai'])
 def list_sessions(db: Session=Depends(get_db), current_user: User=Depends(get_current_user)):
@@ -57,7 +105,10 @@ def get_session_messages(session_id: UUID, db: Session=Depends(get_db), current_
     session = memory.get_or_create_session(db, current_user.id, session_id)
     if session.session_id != session_id:
         raise HTTPException(status_code=404, detail='Conversation not found')
-    return db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc()).all()
+    return db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(
+        ChatMessage.created_at.asc(),
+        case((ChatMessage.role == 'user', 0), else_=1),
+    ).all()
 
 @router.get('/admin/agent-activity', response_model=list[AgentRunOut], tags=['Admin'])
 def agent_activity(limit: int=50, db: Session=Depends(get_db), current_admin: User=Depends(require_admin)):

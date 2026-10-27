@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { CreditCard, Search, DollarSign } from "lucide-react";
+import { CreditCard, Search } from "lucide-react";
 import { getAllPayments, updatePaymentStatus } from "../../services/paymentService";
 import PageLoader from "../../components/common/PageLoader";
 import ErrorState from "../../components/common/ErrorState";
 import EmptyState from "../../components/common/EmptyState";
 import Badge from "../../components/common/Badge";
+
+const formatAmount = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+});
 
 export default function AdminPayments() {
   const [payments, setPayments] = useState([]);
@@ -104,7 +109,7 @@ export default function AdminPayments() {
                         {p.registration_id}
                       </td>
                       <td style={{ padding: "1rem 1.25rem", fontWeight: 700, color: "var(--text-primary)" }}>
-                        ${p.amount || "0.00"}
+                        {formatAmount.format(Number(p.amount ?? 0))}
                       </td>
                       <td style={{ padding: "1rem 1.25rem" }}>
                         <Badge variant={p.status === "COMPLETED" ? "success" : p.status === "PENDING" ? "warning" : "danger"}>

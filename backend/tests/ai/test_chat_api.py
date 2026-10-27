@@ -30,6 +30,7 @@ def test_chat_endpoint_accepts_guest_without_a_token(chat_client):
     assert response.status_code == 200
     assert run_agent.call_args.kwargs['user_id'] is None
     assert 'role' not in run_agent.call_args.kwargs
+    assert 'agent;dur=1.00' in response.headers['server-timing']
     assert chat_client.post('/api/public/chat', json={'message': 'Hello'}).status_code == 404
 
 def test_chat_endpoint_preserves_authenticated_user_without_accepting_a_supplied_role(chat_client):

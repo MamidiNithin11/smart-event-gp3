@@ -1,21 +1,37 @@
 from __future__ import annotations
+from pathlib import Path
 from typing import Any
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+BACKEND_ENV_FILE = Path(__file__).resolve().parents[2] / '.env'
+
+
 class LLMSettings(BaseSettings):
+    GROQ_API_KEY: str = ''
+    GROQ_MODEL: str = Field(min_length=1)
     OPENROUTER_API_KEY: str = ''
-    OPENROUTER_BASE_URL: str = 'https://openrouter.ai/api/v1'
+    OPENROUTER_BASE_URL: str = Field(min_length=1)
     OPENROUTER_MODEL: str = Field(min_length=1)
     OPENROUTER_FALLBACK_MODELS: str = ''
-    LLM_TIMEOUT_SECONDS: int = Field(default=60, ge=5, le=300)
-    LLM_MAX_RETRIES: int = Field(default=1, ge=0, le=3)
+    LLM_TIMEOUT_SECONDS: int = Field(default=10, ge=5, le=300)
+    LLM_TOTAL_TIMEOUT_SECONDS: int = Field(default=12, ge=5, le=300)
+    LLM_MAX_RETRIES: int = Field(default=0, ge=0, le=3)
+
     class Config:
-        env_file = '.env'
+        env_file = BACKEND_ENV_FILE
         extra = 'ignore'
 
     def provider_config(self, provider: str) -> dict[str, Any]:
         provider_name = provider.lower().strip()
+        if provider_name == 'groq':
+            return {
+                'name': provider_name,
+                'configured': bool(self.GROQ_API_KEY.strip()) and not self._is_placeholder(self.GROQ_API_KEY),
+                'api_key': self.GROQ_API_KEY.strip(),
+                'base_url': 'https://api.groq.com/openai/v1',
+                'model': self.GROQ_MODEL,
+            }
         if provider_name == 'openrouter':
             return {
                 'name': provider_name,
@@ -28,9 +44,11 @@ class LLMSettings(BaseSettings):
 
     def is_configured(self, provider: str) -> bool:
         return bool(self.provider_config(provider).get('configured'))
+
     def configured_providers(self) -> list[str]:
-        providers = ['openrouter']
+        providers = ['groq', 'openrouter']
         return [provider for provider in providers if self.is_configured(provider)]
+
     @property
     def openrouter_fallback_models(self) -> tuple[str, ...]:
         return tuple(
@@ -51,9 +69,10 @@ class LLMSettings(BaseSettings):
             'configured': self.configured_providers(),
             'available': [
                 provider
-                for provider in ['openrouter']
+                for provider in ['groq', 'openrouter']
                 if self.provider_config(provider)['configured']
             ],
         }
+
 
 llm_settings = LLMSettings()

@@ -38,7 +38,10 @@ def create_event(event_data: EventCreate, db: Session=Depends(get_db), current_u
         venue = db.query(Venue).filter(Venue.venue_id == event_data.venue_id).first()
         if not venue:
             raise HTTPException(status_code=404, detail='Venue not found')
-    return event_service.create_event(db=db, title=event_data.title, description=event_data.description, category=event_data.category, venue_id=event_data.venue_id, address=event_data.address, event_date=event_data.event_date, end_time=event_data.end_time, registration_deadline=event_data.registration_deadline, capacity=event_data.capacity, ticket_price=event_data.ticket_price, actor_id=current_user.id)
+    try:
+        return event_service.create_event(db=db, title=event_data.title, description=event_data.description, category=event_data.category, venue_id=event_data.venue_id, address=event_data.address, event_date=event_data.event_date, end_time=event_data.end_time, registration_deadline=event_data.registration_deadline, capacity=event_data.capacity, ticket_price=event_data.ticket_price, actor_id=current_user.id)
+    except event_service.DuplicateEventTitleError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 @router.put('/{event_id}', response_model=EventResponse)
 def update_event(event_id: UUID, event_data: EventUpdate, db: Session=Depends(get_db), current_user: User=Depends(require_admin)):

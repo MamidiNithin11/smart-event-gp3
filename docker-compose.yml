@@ -32,6 +32,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - APP_ENV=production
       - ENABLE_API_DOCS=false
+      # Replace with your real domain when deploying to cloud (e.g. https://yourdomain.com)
+      - CORS_ORIGINS=http://localhost,http://127.0.0.1
     depends_on:
       redis:
         condition: service_healthy

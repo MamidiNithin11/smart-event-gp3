@@ -1,10 +1,12 @@
 from __future__ import annotations
 import logging
 import re
+import time
 from app.core.ai_config import ai_settings
 from app.llm.exceptions import LLMUnavailableError
 from app.llm.router import LLMProviderRouter
 from app.rag.search import RetrievedChunk
+from app.observability.timing import emit_timing
 logger = logging.getLogger(__name__)
 _RERANK_PROMPT = "Rate how well each passage answers the user's question.\n\nQuestion: {query}\nPassages:\n{passages}\n\nScoring guide:\n  0-2  = unrelated\n  3-5  = same topic, does not answer the question\n  6-8  = partially answers it\n  9-10 = directly and completely answers it\n\nReply with ONE line per passage, nothing else, in this exact format:\n[1] 7\n[2] 2\n"
 
@@ -15,14 +17,29 @@ def rerank(query: str, candidates: list[RetrievedChunk], top_k: int | None=None,
     if not ai_settings.ENABLE_RERANKER or len(candidates) <= 1:
         return candidates[:top_k]
     backend = backend or 'llm'
+    started = time.perf_counter()
     try:
         if backend == 'cross_encoder':
             scored = _rerank_cross_encoder(query, candidates)
         else:
             scored = _rerank_llm(query, candidates)
     except (LLMUnavailableError, ImportError):
+        emit_timing(
+            'rag.rerank_backend',
+            (time.perf_counter() - started) * 1000,
+            backend=backend,
+            candidate_count=len(candidates),
+            outcome='fallback',
+        )
         logger.warning('Reranking failed, falling back to fused order.')
         return candidates[:top_k]
+    emit_timing(
+        'rag.rerank_backend',
+        (time.perf_counter() - started) * 1000,
+        backend=backend,
+        candidate_count=len(candidates),
+        outcome='success',
+    )
     ranked = sorted(scored, key=lambda c: c.rerank_score or 0.0, reverse=True)
     return ranked[:top_k]
 
@@ -31,6 +48,7 @@ def _rerank_llm(query: str, candidates: list[RetrievedChunk]) -> list[RetrievedC
     response = LLMProviderRouter().invoke(
         _RERANK_PROMPT.format(query=query, passages=passages),
         temperature=0.0,
+        operation='rag_rerank',
     )
     scores = _parse_scores(str(response.content), expected=len(candidates))
     for chunk, score in zip(candidates, scores):

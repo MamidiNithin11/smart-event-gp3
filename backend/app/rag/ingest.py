@@ -2,7 +2,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from langsmith import traceable
 from app.core.redis_cache import redis_cache
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
@@ -12,7 +11,6 @@ from app.rag.chunker import build_embedding_text, chunk_markdown
 from app.rag.clients import embed_texts_openrouter_model_async, embed_texts_openrouter
 from app.rag.converter import SUPPORTED, ConvertedDocument, convert_file
 from app.rag.metadata import extract_metadata
-from app.observability.langsmith import langsmith_trace
 logger = logging.getLogger(__name__)
 
 SUPPORTED_INDEXES = frozenset({'nvidia'})
@@ -106,25 +104,9 @@ async def ingest_document(
     target_index: str | None = None,
 ) -> IngestResult:
     _resolve_target_index(target_index)
-    with langsmith_trace('rag-ingestion'):
-        return await _ingest_nvidia_document(db, document, force=force)
+    return await _ingest_nvidia_document(db, document, force=force)
 
 
-def _ingest_trace_inputs(inputs: dict) -> dict:
-    document = inputs.get('document')
-    return {
-        'filename': getattr(document, 'filename', ''),
-        'doc_type': getattr(document, 'doc_type', ''),
-        'content_hash': getattr(document, 'content_hash', ''),
-        'force': inputs.get('force', False),
-    }
-
-
-@traceable(
-    name='rag.index_document',
-    run_type='chain',
-    process_inputs=_ingest_trace_inputs,
-)
 async def _ingest_nvidia_document(db: Session, document: ConvertedDocument, force: bool = False) -> IngestResult:
     record = db.query(KnowledgeDocument).filter(KnowledgeDocument.filename == document.filename).first()
     staged_rows = (

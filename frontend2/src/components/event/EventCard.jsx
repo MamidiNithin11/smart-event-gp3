@@ -14,9 +14,7 @@ export default function EventCard({ event, isRegistered, actionLabel, onAction }
   const dateStr = dateObj
     ? dateObj.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
     : "TBA";
-
   const venueName = event.venue_name || event.venue || event.address || "Venue TBA";
-
   const defaultBtnLabel = isRegistered ? "Registered • View Pass" : "Register Event →";
   const btnLabel = actionLabel || defaultBtnLabel;
 

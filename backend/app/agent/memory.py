@@ -2,6 +2,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 from app.core.ai_config import ai_settings
 from app.models.agent import AgentSession, ChatMessage
@@ -20,9 +21,13 @@ def get_or_create_session(db: Session, user_id: UUID | None, session_id: UUID | 
 
 def load_history(db: Session, session_id: UUID, limit: int | None=None) -> list[BaseMessage]:
     limit = limit or ai_settings.MEMORY_WINDOW_MESSAGES
-    rows = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.desc()).limit(limit).all()
+    rows = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(
+        ChatMessage.created_at.desc(),
+        case((ChatMessage.role == 'assistant', 0), else_=1),
+    ).limit(limit).all()
+    rows.sort(key=lambda row: (row.created_at, row.role != 'user'))
     messages: list[BaseMessage] = []
-    for row in reversed(rows):
+    for row in rows:
         if row.role == 'user':
             messages.append(HumanMessage(content=row.content))
         elif row.role == 'assistant':

@@ -50,6 +50,35 @@ def test_completed_event_service_returns_only_completed_published_events(monkeyp
     assert event_service.get_completed_events(Database()) == [completed]
 
 
+def test_reload_events_uses_one_query_and_preserves_cached_order():
+    first_id = uuid4()
+    second_id = uuid4()
+    first = Event(event_id=first_id)
+    second = Event(event_id=second_id)
+    query_count = 0
+
+    class Query:
+        def filter(self, _condition):
+            return self
+
+        def all(self):
+            return [second, first]
+
+    class Database:
+        def query(self, _model):
+            nonlocal query_count
+            query_count += 1
+            return Query()
+
+    events = event_service._reload_events(
+        Database(),
+        [{'event_id': str(first_id)}, {'event_id': str(second_id)}, {'event_id': 'invalid'}],
+    )
+
+    assert events == [first, second]
+    assert query_count == 1
+
+
 def test_public_feedback_response_does_not_expose_attendee_identity():
     response = PublicFeedbackResponse(
         event_id=uuid4(),

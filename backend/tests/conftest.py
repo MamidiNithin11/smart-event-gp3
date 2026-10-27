@@ -2,6 +2,8 @@ import os
 os.environ['DATABASE_URL'] = 'postgresql://postgres:password@localhost:5432/event_management_test'
 import pytest
 os.environ.setdefault('OPENROUTER_MODEL', 'test/openrouter-chat-model')
+os.environ.setdefault('OPENROUTER_BASE_URL', 'https://openrouter.example/api/v1')
+os.environ.setdefault('GROQ_MODEL', 'test/groq-chat-model')
 os.environ.setdefault('OPENROUTER_EMBEDDING_MODEL', 'test/openrouter-embedding-model')
 os.environ.setdefault('RAG_ACTIVE_EMBEDDING_INDEX', 'nvidia')
 from fastapi.testclient import TestClient

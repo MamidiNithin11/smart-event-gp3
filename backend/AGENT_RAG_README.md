@@ -45,8 +45,8 @@ Everything is logged to `agent_runs` and `tool_calls` for the
 
 - PostgreSQL with the **pgvector** extension available
 - Python 3.11+
-- An OpenRouter API key for chat and embeddings —
-  <https://openrouter.ai/keys>
+- A Groq API key for agent chat — <https://console.groq.com/keys>
+- An OpenRouter API key for RAG embeddings — <https://openrouter.ai/keys>
 
 Check pgvector is installable before anything else. If this fails, nothing
 below will work:
@@ -310,13 +310,12 @@ limit, not by taste. Longer chunks are silently truncated by the model — you
 get a vector that does not represent its own text and **no error anywhere**. A
 test asserts `CHUNK_SIZE + OVERLAP` stays under that ceiling.
 
-All chat and embedding requests use OpenRouter.
-Set `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`,
-`OPENROUTER_FALLBACK_MODELS`, and `OPENROUTER_EMBEDDING_MODEL` in the backend
-environment. The primary chat model is tried first, followed by the
-comma-separated fallback model IDs in order. Model identifiers have no
-application-code defaults and must be configured explicitly. The OpenRouter
-endpoint defaults to `https://openrouter.ai/api/v1`.
+Agent chat tries Groq first when `GROQ_API_KEY` is configured, using the
+environment-provided `GROQ_MODEL`. If Groq fails with a retryable provider
+error (including rate limiting), the router tries OpenRouter when configured.
+OpenRouter also remains the embeddings provider, so keep `OPENROUTER_API_KEY`,
+`OPENROUTER_MODEL`, and `OPENROUTER_EMBEDDING_MODEL` configured for fallback
+chat and RAG.
 
 ### Retrieval tuning
 
@@ -332,6 +331,34 @@ endpoint defaults to `https://openrouter.ai/api/v1`.
 Feature flags: `ENABLE_RERANKER`, `ENABLE_METADATA_EXTRACTION`,
 `ENABLE_HALLUCINATION_CHECK`. Turn them off to isolate a problem — if answers
 improve with the reranker off, the reranker is the issue.
+
+`ENABLE_RERANKER` defaults to `false` to avoid an extra LLM request on each
+policy search. Set it to `true` in `backend/.env` when reranking quality is
+more important than response time.
+
+### Chat latency diagnostics
+
+The chat request emits one-line JSON timing records through the
+`app.chat_timing` logger. Filter by `event=chat_timing` and correlate records
+with `run_id` when present. Timings cover authentication, agent/session/run
+database stages, conversation history and prompt profiling, LangGraph nodes,
+each model attempt and router invocation, tools, response persistence, and
+individual RAG retrieval/generation stages. SQL records include a hashed
+statement ID and a redacted statement shape; SQL parameters are not logged.
+
+`estimated_input_tokens` is a rough character-count estimate, not the model's
+tokenizer count. Prompt text, tool arguments, and API credentials are not
+included in these timing records. The `/api/chat` response also includes a
+`Server-Timing` header, while the browser logs the total request duration and
+backend agent duration under `[chat-timing]`. The current stream endpoint runs
+the agent before yielding its first event, so it does not provide model-token
+time-to-first-token measurements.
+
+Stage timings are application logs, not fields shown in Admin Agent Activity;
+that screen currently exposes total run and per-tool latency. To investigate a
+slow production request, restart the instrumented backend, send a representative
+request, and compare all timing records for its run ID. A local mocked test
+duration does not measure OpenRouter, production database, or browser latency.
 
 ---
 

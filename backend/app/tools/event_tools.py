@@ -68,11 +68,21 @@ def get_event_details(event_id: str) -> str:
 
 @tool
 def create_event(title: str, category: str, venue_id: str, event_date: str, capacity: int, end_time: str='', description: str='', registration_deadline: str='') -> str:
-    """Create a new event in draft status (Admin only)."""
+    """Create an event as a draft (Admin only).
+
+    Pass the real venue_id returned by search_venues. Pass event_date as the
+    event start date and time, and pass end_time and registration_deadline
+    when provided. Date/time values must be ISO 8601 strings, for example
+    2026-11-02T14:00:00+05:30. Check venue availability before calling this
+    tool. The event is always created as a draft; status is not an argument.
+    """
     context = require_admin('create events')
     if capacity <= 0:
         return 'Capacity must be a positive number.'
-    event = event_service.create_event(db=context.db, title=title, description=description or None, category=category, venue_id=parse_uuid(venue_id, 'venue_id'), event_date=parse_datetime(event_date), end_time=parse_datetime(end_time) if end_time else None, registration_deadline=parse_datetime(registration_deadline) if registration_deadline else None, capacity=capacity, actor_id=context.user_id)
+    try:
+        event = event_service.create_event(db=context.db, title=title, description=description or None, category=category, venue_id=parse_uuid(venue_id, 'venue_id'), event_date=parse_datetime(event_date), end_time=parse_datetime(end_time) if end_time else None, registration_deadline=parse_datetime(registration_deadline) if registration_deadline else None, capacity=capacity, actor_id=context.user_id)
+    except event_service.DuplicateEventTitleError as exc:
+        return str(exc)
     return f"Created '{event.title}' (event_id: {event.event_id}) for {capacity} people. It is in draft status and is not yet visible to users - publish it with update_event when ready."
 
 @tool

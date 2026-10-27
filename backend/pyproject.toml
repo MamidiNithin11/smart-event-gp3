@@ -25,7 +25,6 @@ dependencies = [
     "langgraph>=0.2.60",
     "langchain-core>=0.3.30",
     "langchain-openai>=0.3.0",
-    "langsmith>=0.4.0",
     "openai>=1.60.0",
     "pgvector>=0.3.6",
     "markitdown[pdf,docx,pptx,xlsx]>=0.0.1a3",

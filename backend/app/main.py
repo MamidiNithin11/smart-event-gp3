@@ -7,7 +7,6 @@ from app.core.config import settings
 from app.core.permissions import AuthorizationError
 from app.db.database import Base
 from app.models import User, Event, Registration, Venue
-
 from app.routers.event import router as event_router
 from app.routers.registration import router as registration_router
 from app.routers.venue import router as venue_router

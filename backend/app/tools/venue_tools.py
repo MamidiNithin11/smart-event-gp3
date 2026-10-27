@@ -6,12 +6,16 @@ from app.tools.formatting import format_datetime, parse_datetime, parse_uuid
 
 @tool
 def search_venues(name: str='') -> str:
-    """Search for available venues by name or list all venues."""
+    """Search for venues by name or list the venue directory.
+
+    This tool does not check whether a venue is available at a particular
+    date or time. Use check_venue_availability when a date and time are known.
+    """
     db = get_tool_context().db
     venues = availability_service.find_venues_by_name(db, name) if name else venue_service.get_all_venues(db)
     if not venues:
         return f"No venues matched '{name}'." if name else 'No venues are set up yet.'
-    lines = [f'- {venue.name} (venue_id: {venue.venue_id}) | capacity {venue.capacity} | {venue.address}, {venue.city}' for venue in venues[:15]]
+    lines = [f'- {venue.name} (venue_id: {venue.venue_id}) | capacity {venue.capacity} | {venue.address}, {venue.city}' for venue in venues]
     return f'Found {len(venues)} venue(s):\n' + '\n'.join(lines)
 
 @tool

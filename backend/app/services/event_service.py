@@ -1,7 +1,8 @@
 from __future__ import annotations
 import logging
 from datetime import timezone
-from sqlalchemy import or_
+from uuid import UUID
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from app.core.redis_cache import redis_cache
 from app.core.event_status import is_event_completed
@@ -18,6 +19,9 @@ _TTL_SEARCH = 120
 
 class EventDeletionConflict(Exception):
     """Raised when an event has records that must be preserved."""
+
+class DuplicateEventTitleError(Exception):
+    """Raised when an event with the same title already exists."""
 
 
 def _event_to_dict(e: Event) -> dict:
@@ -58,6 +62,7 @@ def get_event_by_id(db: Session, event_id, *, actor_id=None):
             except AuthorizationError:
                 return None
         return event
+
     event = db.query(Event).filter(Event.event_id == event_id).first()
     if event:
         if event.status != 'published':
@@ -69,6 +74,23 @@ def get_event_by_id(db: Session, event_id, *, actor_id=None):
                 return None
         redis_cache.set(cache_key, _event_to_dict(event), ttl=_TTL_ITEM)
     return event
+
+def find_events_by_title(db: Session, title: str, *, actor_id):
+    require_admin_actor(db, actor_id)
+    exact_matches = (
+        db.query(Event)
+        .filter(func.lower(Event.title) == title.casefold())
+        .all()
+    )
+    if exact_matches:
+        return exact_matches
+    return (
+        db.query(Event)
+        .filter(Event.title.ilike(f'%{title}%'))
+        .order_by(Event.title.asc())
+        .limit(10)
+        .all()
+    )
 
 def get_published_events(db: Session):
     cache_key = 'events:published:v2'
@@ -161,6 +183,17 @@ def get_events_by_city(db: Session, city: str):
 
 def create_event(db: Session, title: str, description: str, category: str, venue_id, event_date, registration_deadline, capacity: int, actor_id, end_time=None, ticket_price=0.0, address=None):
     actor = require_admin_actor(db, actor_id)
+    title = title.strip()
+    existing_event = (
+        db.query(Event)
+        .filter(func.lower(func.trim(Event.title)) == title.lower())
+        .first()
+    )
+    if existing_event is not None:
+        raise DuplicateEventTitleError(
+            f"An event titled '{existing_event.title}' already exists "
+            f"(status: {existing_event.status}); no new event was created."
+        )
     if end_time is not None:
         start_utc = event_date.replace(tzinfo=timezone.utc) if event_date.tzinfo is None else event_date.astimezone(timezone.utc)
         end_utc = end_time.replace(tzinfo=timezone.utc) if end_time.tzinfo is None else end_time.astimezone(timezone.utc)
@@ -238,7 +271,6 @@ def delete_event(db: Session, event_id, *, actor_id):
     return event
 
 def _dict_to_event_orm(data: dict, db: Session) -> Event | None:
-    from uuid import UUID
     try:
         eid = UUID(data['event_id'])
     except (KeyError, ValueError):
@@ -246,9 +278,17 @@ def _dict_to_event_orm(data: dict, db: Session) -> Event | None:
     return db.query(Event).filter(Event.event_id == eid).first()
 
 def _reload_events(db: Session, cached: list[dict]) -> list[Event]:
-    events = []
+    event_ids = []
     for item in cached:
-        event = _dict_to_event_orm(item, db)
-        if event is not None:
-            events.append(event)
-    return events
+        try:
+            event_ids.append(UUID(item['event_id']))
+        except (KeyError, ValueError):
+            continue
+    if not event_ids:
+        return []
+
+    events_by_id = {
+        event.event_id: event
+        for event in db.query(Event).filter(Event.event_id.in_(set(event_ids))).all()
+    }
+    return [events_by_id[event_id] for event_id in event_ids if event_id in events_by_id]

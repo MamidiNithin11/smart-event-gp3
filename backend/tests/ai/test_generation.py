@@ -7,7 +7,8 @@ from app.rag.generator import NO_ANSWER, build_context, check_grounding
 from app.rag.reranker import _parse_scores, rerank
 from tests.ai.conftest import make_chunk
 
-def test_generate_answer_uses_central_router_for_answer_and_grounding():
+def test_generate_answer_uses_central_router_for_answer_and_grounding(monkeypatch):
+    monkeypatch.setattr('app.rag.generator.ai_settings.ENABLE_HALLUCINATION_CHECK', True)
     router = MagicMock()
     router.invoke.side_effect = [
         MagicMock(content='Refunds apply to paid events. [Cancellation Policy]'),
@@ -18,8 +19,8 @@ def test_generate_answer_uses_central_router_for_answer_and_grounding():
     assert result.answer == 'Refunds apply to paid events. [Cancellation Policy]'
     assert router_class.call_count == 2
     assert [call.kwargs for call in router.invoke.call_args_list] == [
-        {'temperature': 0.0},
-        {'temperature': 0.0},
+        {'temperature': 0.0, 'operation': 'rag_answer'},
+        {'temperature': 0.0, 'operation': 'rag_grounding'},
     ]
 
 def test_generate_answer_rejects_an_empty_model_response():
@@ -48,23 +49,26 @@ def test_garbage_response_yields_all_neutral():
     scores = _parse_scores('I cannot help with that request.', expected=3)
     assert scores == [5.0, 5.0, 5.0]
 
-def test_reranker_reorders_by_score():
+def test_reranker_reorders_by_score(monkeypatch):
     candidates = [make_chunk('a'), make_chunk('b'), make_chunk('c')]
+    monkeypatch.setattr('app.rag.reranker.ai_settings.ENABLE_RERANKER', True)
     with patch('app.rag.reranker.LLMProviderRouter') as router:
         router.return_value.invoke.return_value = MagicMock(content='[1] 2\n[2] 10\n[3] 5')
         result = rerank('refund policy', candidates, top_k=3)
     assert [c.chunk_id for c in result] == ['b', 'c', 'a']
 
-def test_reranker_truncates_to_top_k():
+def test_reranker_truncates_to_top_k(monkeypatch):
     candidates = [make_chunk(f'c{i}') for i in range(10)]
+    monkeypatch.setattr('app.rag.reranker.ai_settings.ENABLE_RERANKER', True)
     with patch('app.rag.reranker.LLMProviderRouter') as router:
         router.return_value.invoke.return_value = MagicMock(content='\n'.join((f'[{i}] {i}' for i in range(1, 11))))
         result = rerank('q', candidates, top_k=4)
     assert len(result) == 4
 
-def test_reranker_failure_falls_back_to_fused_order():
+def test_reranker_failure_falls_back_to_fused_order(monkeypatch):
     candidates = [make_chunk('a'), make_chunk('b'), make_chunk('c')]
     from app.llm.exceptions import LLMUnavailableError
+    monkeypatch.setattr('app.rag.reranker.ai_settings.ENABLE_RERANKER', True)
     with patch('app.rag.reranker.LLMProviderRouter') as router:
         router.return_value.invoke.side_effect = LLMUnavailableError(
             'multi-provider', 'All configured LLM providers failed.'
@@ -74,6 +78,14 @@ def test_reranker_failure_falls_back_to_fused_order():
 
 def test_reranker_short_circuits_on_empty_input():
     assert rerank('q', []) == []
+
+def test_reranker_skips_llm_when_disabled(monkeypatch):
+    candidates = [make_chunk('a'), make_chunk('b')]
+    monkeypatch.setattr('app.rag.reranker.ai_settings.ENABLE_RERANKER', False)
+    with patch('app.rag.reranker.LLMProviderRouter') as router:
+        result = rerank('q', candidates, top_k=1)
+    assert result == candidates[:1]
+    router.assert_not_called()
 
 def test_metadata_extraction_uses_central_router():
     with patch('app.rag.metadata.LLMProviderRouter') as router:
@@ -115,8 +127,10 @@ def test_checker_exception_rejects_the_answer():
     assert grounded is False
     assert 'unavailable' in note
 
-def test_grounding_checker_unavailable_does_not_return_unverified_answer():
+def test_grounding_checker_unavailable_does_not_return_unverified_answer(monkeypatch):
     from app.llm.exceptions import LLMUnavailableError
+    monkeypatch.setattr('app.rag.generator.ai_settings.ENABLE_HALLUCINATION_CHECK', True)
+    monkeypatch.setattr('app.rag.generator.ai_settings.MAX_GENERATION_RETRIES', 1)
     router = MagicMock()
     router.invoke.side_effect = [
         MagicMock(content='Refunds apply to paid events.'),

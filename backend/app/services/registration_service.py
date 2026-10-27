@@ -25,6 +25,17 @@ def get_event_registrations(db: Session, event_id, *, actor_id):
     require_admin_actor(db, actor_id)
     return db.query(Registration).filter(Registration.event_id == event_id).all()
 
+def get_event_registration_count(db: Session, event_id, *, actor_id) -> int:
+    require_admin_actor(db, actor_id)
+    return (
+        db.query(Registration)
+        .filter(
+            Registration.event_id == event_id,
+            Registration.status == 'confirmed',
+        )
+        .count()
+    )
+
 def create_registration(db: Session, user_id, event_id, *, actor_id):
     require_participant_actor(db, actor_id, user_id)
     event = db.query(Event).filter(Event.event_id == event_id).first()

@@ -1,11 +1,14 @@
 from __future__ import annotations
 import logging
+import math
 import re
+import time
 from dataclasses import dataclass, field
 from app.core.ai_config import ai_settings
 from app.llm.exceptions import LLMProviderError
 from app.llm.router import LLMProviderRouter
 from app.rag.search import RetrievedChunk
+from app.observability.timing import emit_timing
 logger = logging.getLogger(__name__)
 NO_ANSWER = 'I could not find that in the event policy documents. Please check with an event administrator.'
 _ANSWER_PROMPT = 'You answer questions about event-management policies using ONLY the context below.\n\nRules:\n- Use only what the context states. Do not add general knowledge.\n- If the context does not contain the answer, reply exactly: {no_answer}\n- Cite the source in brackets after each claim, e.g. [Cancellation Policy].\n- Be concise. Two or three sentences unless the question needs a list.\n{extra_rules}\n\nContext:\n{context}\n\nQuestion: {question}\n\nAnswer:'
@@ -34,7 +37,17 @@ def build_context(chunks: list[RetrievedChunk]) -> str:
 def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GenerationResult:
     if not chunks:
         return GenerationResult(answer=NO_ANSWER, grounded=True, sources=[])
+    started = time.perf_counter()
+    context_started = time.perf_counter()
     context = build_context(chunks)
+    emit_timing(
+        'rag.context_prepare',
+        (time.perf_counter() - context_started) * 1000,
+        chunk_count=len(chunks),
+        context_chars=len(context),
+        estimated_context_tokens=math.ceil(len(context) / 4),
+        token_estimate='characters_divided_by_4',
+    )
     sources = _unique_sources(chunks)
     extra_rules = ''
     retry_count = 0
@@ -45,20 +58,25 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> GenerationRe
         response = LLMProviderRouter().invoke(
             _ANSWER_PROMPT.format(no_answer=NO_ANSWER, context=context, question=question, extra_rules=extra_rules),
             temperature=0.0,
+            operation='rag_answer',
         )
         answer = str(response.content).strip()
         if not answer:
             raise RuntimeError('RAG chat model returned an empty answer.')
         if not ai_settings.ENABLE_HALLUCINATION_CHECK:
+            emit_timing('rag.answer_generation', (time.perf_counter() - started) * 1000, grounding_enabled=False)
             return GenerationResult(answer=answer, grounded=True, sources=sources)
         if NO_ANSWER.lower() in answer.lower():
+            emit_timing('rag.answer_generation', (time.perf_counter() - started) * 1000, grounding_enabled=True)
             return GenerationResult(answer=NO_ANSWER, grounded=True, retry_count=retry_count, sources=sources)
         grounded, note = check_grounding(answer, context)
         if grounded:
+            emit_timing('rag.answer_generation', (time.perf_counter() - started) * 1000, grounding_enabled=True)
             return GenerationResult(answer=answer, grounded=True, retry_count=retry_count, sources=sources, check_note=note)
         logger.warning('Ungrounded answer on attempt %d.', attempt + 1)
         retry_count += 1
         extra_rules = f'- A previous attempt was rejected as unsupported ({note}). Quote the context closely and omit anything it does not state.'
+    emit_timing('rag.answer_generation', (time.perf_counter() - started) * 1000, grounding_enabled=True)
     return GenerationResult(answer=NO_ANSWER, grounded=False, retry_count=retry_count, sources=sources, check_note=note)
 
 def check_grounding(answer: str, context: str) -> tuple[bool, str]:
@@ -66,6 +84,7 @@ def check_grounding(answer: str, context: str) -> tuple[bool, str]:
         response = LLMProviderRouter().invoke(
             _GROUNDING_PROMPT.format(context=context, answer=answer),
             temperature=0.0,
+            operation='rag_grounding',
         )
         raw = str(response.content).strip()
     except LLMProviderError:

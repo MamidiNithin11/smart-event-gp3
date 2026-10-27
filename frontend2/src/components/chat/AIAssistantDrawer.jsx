@@ -13,6 +13,8 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  Maximize2,
+  Minimize2,
   Trash2,
 } from "lucide-react";
 import { useAIChat } from "../../context/AIChatContext";
@@ -38,6 +40,7 @@ export default function AIAssistantDrawer() {
 
   const [input, setInput] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [deletingSessionId, setDeletingSessionId] = useState(null);
   const messagesEndRef = useRef(null);
 
@@ -90,7 +93,7 @@ export default function AIAssistantDrawer() {
           top: 0,
           right: 0,
           bottom: 0,
-          width: "min(460px, 100vw)",
+          width: isExpanded ? "min(900px, 100vw)" : "min(460px, 100vw)",
           height: "100vh",
           backgroundColor: "var(--bg-primary)",
           boxShadow: "-8px 0 25px rgba(0,0,0,0.15)",
@@ -99,6 +102,7 @@ export default function AIAssistantDrawer() {
           flexDirection: "column",
           animation: "slideLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
           borderLeft: "1px solid var(--border-color)",
+          transition: "width 0.25s ease",
         }}
       >
         
@@ -152,6 +156,14 @@ export default function AIAssistantDrawer() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <button
+              onClick={() => setIsExpanded((expanded) => !expanded)}
+              className="btn btn-ghost btn-icon"
+              title={isExpanded ? "Collapse assistant" : "Expand assistant"}
+              aria-label={isExpanded ? "Collapse assistant" : "Expand assistant"}
+            >
+              {isExpanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+            </button>
             <button
               onClick={() => setShowHistory((prev) => !prev)}
               className="btn btn-ghost btn-icon"

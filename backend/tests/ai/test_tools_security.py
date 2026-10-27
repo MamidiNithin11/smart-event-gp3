@@ -106,8 +106,44 @@ def test_admin_tools_cover_requested_management_surfaces():
     assert {
         'create_venue', 'update_venue', 'delete_venue',
         'list_all_registrations', 'list_users', 'create_user', 'update_user_role', 'delete_user',
-        'view_agent_activity', 'view_agent_run',
+        'view_agent_activity', 'view_agent_run', 'get_event_registration_count',
     }.issubset(registered)
+
+def test_event_registration_count_uses_event_name_and_confirmed_count(admin_context, monkeypatch):
+    from app.tools import registration_tools
+
+    event = SimpleNamespace(title='ByteBloom', event_id=uuid.uuid4())
+    monkeypatch.setattr(
+        event_service,
+        'find_events_by_title',
+        lambda db, title, *, actor_id: [event],
+    )
+    count = MagicMock(return_value=7)
+    monkeypatch.setattr(registration_service, 'get_event_registration_count', count)
+
+    result = registration_tools.get_event_registration_count.invoke(
+        {'event_name': 'bytebloom'}
+    )
+
+    assert result == "'ByteBloom' has 7 confirmed registration(s)."
+    count.assert_called_once_with(
+        admin_context.db,
+        event.event_id,
+        actor_id=admin_context.user_id,
+    )
+
+def test_event_registration_count_rejects_non_admin(user_context, monkeypatch):
+    from app.tools import registration_tools
+
+    get_events = MagicMock()
+    monkeypatch.setattr(event_service, 'find_events_by_title', get_events)
+
+    with pytest.raises(PermissionDenied, match='administrator'):
+        registration_tools.get_event_registration_count.invoke(
+            {'event_name': 'ByteBloom'}
+        )
+
+    get_events.assert_not_called()
 
 def test_no_tool_exposes_identity_as_an_argument():
     forbidden = {'user_id', 'current_user', 'role', 'db', 'session', 'created_by'}
@@ -225,6 +261,86 @@ def test_admin_can_create_events_and_venues(fake_db, user_id, monkeypatch):
     assert event.created_by == user_id
     assert event.status == 'draft'
     assert venue.name == 'Authorized venue'
+
+def test_admin_cannot_create_an_event_with_an_existing_title(fake_db, user_id):
+    actor = User(id=user_id, role='ADMIN')
+    existing_event = Event(title='Existing event', status='draft')
+    fake_db.rows_for[User] = [actor]
+    fake_db.rows_for[Event] = [existing_event]
+
+    with pytest.raises(event_service.DuplicateEventTitleError, match='already exists'):
+        event_service.create_event(
+            fake_db,
+            title=' existing event ',
+            description='',
+            category='Technology',
+            venue_id=uuid.uuid4(),
+            event_date=datetime.now(timezone.utc) + timedelta(days=1),
+            registration_deadline=None,
+            capacity=10,
+            actor_id=user_id,
+        )
+
+    assert fake_db.added == []
+    assert not fake_db.committed
+
+def test_admin_create_event_tool_reports_duplicate_title(admin_context, monkeypatch):
+    from app.tools.event_tools import create_event
+
+    def reject_duplicate(**_kwargs):
+        raise event_service.DuplicateEventTitleError(
+            "An event titled 'Existing event' already exists (status: draft); "
+            'no new event was created.'
+        )
+
+    monkeypatch.setattr(event_service, 'create_event', reject_duplicate)
+
+    result = create_event.invoke({
+        'title': 'Existing event',
+        'category': 'Technology',
+        'venue_id': str(uuid.uuid4()),
+        'event_date': (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+        'capacity': 10,
+    })
+
+    assert 'already exists' in result
+    assert 'no new event was created' in result
+
+def test_admin_create_event_tool_passes_all_supplied_fields(admin_context, monkeypatch):
+    from app.tools.event_tools import create_event
+
+    venue_id = uuid.uuid4()
+    event_id = uuid.uuid4()
+    created_event = SimpleNamespace(
+        title='AI and Cloud Computing Workshop',
+        event_id=event_id,
+    )
+    create = MagicMock(return_value=created_event)
+    monkeypatch.setattr(event_service, 'create_event', create)
+
+    result = create_event.invoke({
+        'title': 'AI and Cloud Computing Workshop',
+        'category': 'Workshop',
+        'venue_id': str(venue_id),
+        'event_date': '2026-11-02T14:00:00+05:30',
+        'end_time': '2026-11-02T17:00:00+05:30',
+        'capacity': 100,
+        'description': 'A technical workshop on AI and cloud computing.',
+        'registration_deadline': '2026-10-31T23:59:00+05:30',
+    })
+
+    assert result.startswith("Created 'AI and Cloud Computing Workshop'")
+    assert 'draft status' in result
+    kwargs = create.call_args.kwargs
+    assert kwargs['title'] == 'AI and Cloud Computing Workshop'
+    assert kwargs['category'] == 'Workshop'
+    assert kwargs['venue_id'] == venue_id
+    assert kwargs['event_date'] == datetime.fromisoformat('2026-11-02T14:00:00+05:30')
+    assert kwargs['end_time'] == datetime.fromisoformat('2026-11-02T17:00:00+05:30')
+    assert kwargs['registration_deadline'] == datetime.fromisoformat('2026-10-31T23:59:00+05:30')
+    assert kwargs['capacity'] == 100
+    assert kwargs['description'] == 'A technical workshop on AI and cloud computing.'
+    assert kwargs['actor_id'] == admin_context.user_id
 
 def test_business_service_rejects_admin_participant_registration(fake_db, user_id):
     actor = User(id=user_id, role='ADMIN')
