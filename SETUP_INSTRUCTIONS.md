@@ -196,6 +196,32 @@ docker compose run --rm backend alembic upgrade head
 docker compose run --rm backend python -m alembic upgrade head
 ```
 
+## Part 6 — Deploy the backend on Railway
+
+The backend is deployed from this repository's Dockerfile; it is not an image
+that you need to find in a registry.
+
+1. In Railway, create a service using **Deploy from GitHub Repo** and select
+   this repository. Do not select **Docker Image** unless you have already
+   built and pushed an image to a container registry.
+2. In the backend service settings, set **Root Directory** to `/backend`.
+   Railway will build `backend/Dockerfile` from that directory.
+3. Add the required backend variables in the service's **Variables** settings:
+   `DATABASE_URL`, `SECRET_KEY`, `CORS_ORIGINS`, `OPENROUTER_API_KEY`,
+   `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, and
+   `OPENROUTER_EMBEDDING_MODEL`. Set
+   `CORS_ORIGINS` to the deployed frontend's full origin (for example,
+   `https://your-frontend.up.railway.app`). Add any other values your
+   `backend/.env.example` requires for the features you use. Do not upload or
+   commit `backend/.env`.
+4. Attach a PostgreSQL service (or configure an external PostgreSQL URL) and
+   run `alembic upgrade head` against it to apply migrations. If using the
+   RAG features, ensure the database has the required pgvector extension.
+5. Generate a public domain for the backend service. The Dockerfile listens on
+   Railway's `PORT` variable; it falls back to port `8000` for local Docker.
+   Check `https://<your-backend-domain>/health` and expect
+   `{"status":"ok"}`.
+
 ---
 
 ## Important environment variables (summary)

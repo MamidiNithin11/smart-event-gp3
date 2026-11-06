@@ -6,7 +6,6 @@ from pydantic_settings import BaseSettings
 
 BACKEND_ENV_FILE = Path(__file__).resolve().parents[2] / '.env'
 
-
 class LLMSettings(BaseSettings):
     GROQ_API_KEY: str = ''
     GROQ_MODEL: str = Field(min_length=1)
