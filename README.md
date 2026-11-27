@@ -616,6 +616,14 @@ Future Recommendations & Analytics
 
 The current implementation provides a foundation for building intelligent workflows around event discovery, registration, knowledge retrieval, administration, and event-related assistance.
 
+Demo:
+<img width="1912" height="866" alt="Screenshot 2026-11-19 194335" src="https://github.com/user-attachments/assets/cb773b8e-d879-4213-a07e-348ef701d8a9" />
+<img width="1905" height="861" alt="Screenshot 2026-11-19 194326" src="https://github.com/user-attachments/assets/00c71b7b-883a-4d4f-a2ee-98485071d3f5" />
+<img width="1891" height="861" alt="Screenshot 2026-11-19 194314" src="https://github.com/user-attachments/assets/a6b9d767-7e9a-4402-9ecb-4aa8ac08287d" />
+<img width="1917" height="871" alt="Screenshot 2026-11-19 194204" src="https://github.com/user-attachments/assets/fab74c01-92ea-493c-b017-3e515da677c7" />
+<img width="1917" height="870" alt="Screenshot 2026-11-19 172818" src="https://github.com/user-attachments/assets/8c2298fc-7bd5-417e-bee0-1017039b4814" />
+
+
 ## 📄 License
 
 This project was developed as part of the Infosys Springboard Virtual Internship Program for educational and professional learning purposes.
